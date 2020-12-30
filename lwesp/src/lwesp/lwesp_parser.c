@@ -781,3 +781,54 @@ lwespi_parse_cwdhcp(const char* str) {
 
     return 1;
 }
+
+/**
+ * \brief           Parse received message for SYSFLASH?
+ * \param[in]       str: Pointer to input string starting with +SYSFLASH
+ * \param[in]       msg: Pointer to message
+ * \return          `1` on success, `0` otherwise
+ */
+uint8_t
+lwespi_parse_sysflash_get(const char * str, lwesp_msg_t* msg) {
+    return 1;
+}
+
+/**
+ * \brief           Parse received message for SYSFLASH
+ * \param[in]       str: Pointer to input string starting with +SYSFLASH
+ * \param[in]       msg: Pointer to message
+ * \return          `1` on success, `0` otherwise
+ */
+uint8_t
+lwespi_parse_sysflash(const char * str, lwesp_msg_t* msg) {
+    int32_t len = 0;
+    const char * tmp = str;
+
+    if (!CMD_IS_CUR(LWESP_CMD_SYSFLASH)) {
+        return 0;
+    }
+
+    if (msg->msg.sysflash.operation == LWESP_SYSFLASH_OP_READ) {
+        /* +SYSFLASH:<length>,<data> */
+        if (*tmp != '+') {
+            return 0;
+        }
+        /* pointer to length */
+        tmp += 10;
+        len = lwespi_parse_number(&tmp);
+        if (len != msg->msg.sysflash.length) {
+            /* not expected to be different */
+            return 0;
+        }
+
+        if (len > 0) {
+            esp.m.flash.read = 1;
+            esp.m.flash.rem_len = len;
+            esp.m.flash.tot_len = len;
+            esp.m.flash.buff_idx = 0;
+            esp.m.flash.buff = msg->msg.sysflash.pBuf;
+        }
+    }
+
+    return 1;
+}

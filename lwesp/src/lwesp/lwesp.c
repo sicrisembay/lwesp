@@ -515,3 +515,120 @@ lwesp_delay(const uint32_t ms) {
     }
     return 0;
 }
+
+/**
+ * \brief           Get user partition information
+ *
+ * \param[in]       evt_fn: Callback function called when command has finished. Set to `NULL` when not used
+ * \param[in]       evt_arg: Custom argument for event callback function
+ * \param[in]       blocking: Status whether command should be blocking or not
+ * \return          \ref lwespOK on success, member of \ref lwespr_t enumeration otherwise
+ */
+lwespr_t
+lwesp_get_flash_info(const lwesp_api_cmd_evt_fn evt_fn, void* const evt_arg, const uint32_t blocking) {
+    LWESP_MSG_VAR_DEFINE(msg);
+
+    LWESP_MSG_VAR_ALLOC(msg, blocking);
+    LWESP_MSG_VAR_SET_EVT(msg, evt_fn, evt_arg);
+    LWESP_MSG_VAR_REF(msg).cmd_def = LWESP_CMD_SYSFLASH_GET;
+
+    return lwespi_send_msg_to_producer_mbox(&LWESP_MSG_VAR_REF(msg), lwespi_initiate_cmd, 5000);
+}
+
+/**
+ * \brief           Erases sector in a user partition
+ *
+ * \param[in]       name: name of user partition
+ * \param[in]       sector: sector to erase
+ * \param[in]       count: number of sectors to erase. Set to -1 to erase entire user partition.
+ * \param[in]       evt_fn: Callback function called when command has finished. Set to `NULL` when not used
+ * \param[in]       evt_arg: Custom argument for event callback function
+ * \param[in]       blocking: Status whether command should be blocking or not
+ * \return          \ref lwespOK on success, member of \ref lwespr_t enumeration otherwise
+ */
+lwespr_t
+lwesp_erase_flash_sector(const char* name, const uint32_t sector, const int32_t count,
+                  const lwesp_api_cmd_evt_fn evt_fn, void* const evt_arg, const uint32_t blocking) {
+    LWESP_MSG_VAR_DEFINE(msg);
+
+    LWESP_ASSERT("name != NULL", name != NULL);
+
+    LWESP_MSG_VAR_ALLOC(msg, blocking);
+    LWESP_MSG_VAR_SET_EVT(msg, evt_fn, evt_arg);
+    LWESP_MSG_VAR_REF(msg).cmd_def = LWESP_CMD_SYSFLASH;
+    LWESP_MSG_VAR_REF(msg).msg.sysflash.operation = LWESP_SYSFLASH_OP_ERASE;
+    LWESP_MSG_VAR_REF(msg).msg.sysflash.name = name;
+    if (count < 0) {
+        /* Erase Whole user partition */
+        LWESP_MSG_VAR_REF(msg).msg.sysflash.length = -1;
+        LWESP_MSG_VAR_REF(msg).msg.sysflash.offset = 0;
+    } else {
+        /* Erase sector at offset in user partition */
+        LWESP_MSG_VAR_REF(msg).msg.sysflash.offset = sector * 4096;
+        LWESP_MSG_VAR_REF(msg).msg.sysflash.length = count * 4096;
+    }
+
+    return lwespi_send_msg_to_producer_mbox(&LWESP_MSG_VAR_REF(msg), lwespi_initiate_cmd, 5000);
+}
+
+/**
+ * \brief           Writes data to a user partition
+ *
+ * \param[in]       name: name of user partition
+ * \param[in]       pBuf: pointer to data buffer
+ * \param[in]       offset: offset in the user partition
+ * \param[in]       len: number of bytes to be written.
+ * \param[in]       evt_fn: Callback function called when command has finished. Set to `NULL` when not used
+ * \param[in]       evt_arg: Custom argument for event callback function
+ * \param[in]       blocking: Status whether command should be blocking or not
+ * \return          \ref lwespOK on success, member of \ref lwespr_t enumeration otherwise
+ */
+lwespr_t
+lwesp_write_flash(const char* name, uint8_t* pBuf, const uint32_t offset, const uint32_t len, const lwesp_api_cmd_evt_fn evt_fn, void* const evt_arg, const uint32_t blocking) {
+    LWESP_MSG_VAR_DEFINE(msg);
+
+    LWESP_ASSERT("name != NULL", name != NULL);
+    LWESP_ASSERT("pBuf != NULL", pBuf != NULL);
+
+    LWESP_MSG_VAR_ALLOC(msg, blocking);
+    LWESP_MSG_VAR_SET_EVT(msg, evt_fn, evt_arg);
+    LWESP_MSG_VAR_REF(msg).cmd_def = LWESP_CMD_SYSFLASH;
+    LWESP_MSG_VAR_REF(msg).msg.sysflash.operation = LWESP_SYSFLASH_OP_WRITE;
+    LWESP_MSG_VAR_REF(msg).msg.sysflash.name = name;
+    LWESP_MSG_VAR_REF(msg).msg.sysflash.offset = offset;
+    LWESP_MSG_VAR_REF(msg).msg.sysflash.length = (int32_t)len;
+    LWESP_MSG_VAR_REF(msg).msg.sysflash.pBuf = pBuf;
+
+    return lwespi_send_msg_to_producer_mbox(&LWESP_MSG_VAR_REF(msg), lwespi_initiate_cmd, 5000);
+}
+
+/**
+ * \brief           Reads data from a user partition
+ *
+ * \param[in]       name: name of user partition
+ * \param[in]       pBuf: pointer to a buffer that will hold the read data
+ * \param[in]       offset: offset in the user partition
+ * \param[in]       len: number of bytes to read.
+ * \param[in]       evt_fn: Callback function called when command has finished. Set to `NULL` when not used
+ * \param[in]       evt_arg: Custom argument for event callback function
+ * \param[in]       blocking: Status whether command should be blocking or not
+ * \return          \ref lwespOK on success, member of \ref lwespr_t enumeration otherwise
+ */
+lwespr_t
+lwesp_read_flash(const char* name, uint8_t* pBuf, const uint32_t offset, const uint32_t len, const lwesp_api_cmd_evt_fn evt_fn, void* const evt_arg, const uint32_t blocking) {
+    LWESP_MSG_VAR_DEFINE(msg);
+
+    LWESP_ASSERT("name != NULL", name != NULL);
+    LWESP_ASSERT("pBuf != NULL", pBuf != NULL);
+
+    LWESP_MSG_VAR_ALLOC(msg, blocking);
+    LWESP_MSG_VAR_SET_EVT(msg, evt_fn, evt_arg);
+    LWESP_MSG_VAR_REF(msg).cmd_def = LWESP_CMD_SYSFLASH;
+    LWESP_MSG_VAR_REF(msg).msg.sysflash.operation = LWESP_SYSFLASH_OP_READ;
+    LWESP_MSG_VAR_REF(msg).msg.sysflash.name = name;
+    LWESP_MSG_VAR_REF(msg).msg.sysflash.offset = offset;
+    LWESP_MSG_VAR_REF(msg).msg.sysflash.length = (int32_t)len;
+    LWESP_MSG_VAR_REF(msg).msg.sysflash.pBuf = pBuf;
+
+    return lwespi_send_msg_to_producer_mbox(&LWESP_MSG_VAR_REF(msg), lwespi_initiate_cmd, 5000);
+}

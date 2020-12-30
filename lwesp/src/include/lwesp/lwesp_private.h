@@ -70,6 +70,8 @@ typedef enum {
     LWESP_CMD_SYSADC,
     LWESP_CMD_SYSMSG,
     LWESP_CMD_SYSLOG,
+    LWESP_CMD_SYSFLASH,
+    LWESP_CMD_SYSFLASH_GET,
 
     /* WiFi based commands */
     LWESP_CMD_WIFI_CWMODE,                      /*!< Set wifi mode */
@@ -235,6 +237,17 @@ typedef struct {
                                                         reading should ignore incoming data */
     lwesp_pbuf_p        buff;                   /*!< Pointer to data buffer used for receiving data */
 } lwesp_ipd_t;
+
+/**
+ * \brief           Flash data read structure
+ */
+typedef struct {
+    uint8_t             read;                   /*!< Set to 1 when we should process data from flash */
+    size_t              tot_len;                /*!< Total length of packet */
+    size_t              rem_len;                /*!< Remaining bytes to read */
+    size_t              buff_idx;               /*!< Index in buffer to store incoming data */
+    uint8_t*            buff;                   /*!< Pointer to data buffer used for receiving data */
+} lwesp_flash_t;
 
 /**
  * \brief           Message queue structure to share between threads
@@ -456,6 +469,13 @@ typedef struct lwesp_msg {
             uint8_t pki_number;                 /*!< The index of cert and private key, if only one cert and private key, the value should be 0. */
             uint8_t ca_number;                  /*!< The index of CA, if only one CA, the value should be 0. */
         } tcpip_ssl_cfg;                        /*!< SSl configuration for connection */
+        struct {
+            uint8_t operation;                  /*!< Flash operation */
+            const char* name;                   /*!< Name of user partition */
+            uint32_t offset;                    /*!< Offset in user partition */
+            int32_t length;                     /*!< Data Length */
+            uint8_t * pBuf;                     /*!< Pointer to data buffer */
+        } sysflash;
     } msg;                                      /*!< Group of different message contents */
 } lwesp_msg_t;
 
@@ -515,6 +535,8 @@ typedef struct {
 #if LWESP_CFG_MODE_ACCESS_POINT || __DOXYGEN__
     lwesp_ip_mac_t        ap;                   /*!< Access point IP and MAC addressed */
 #endif /* LWESP_CFG_MODE_ACCESS_POINT || __DOXYGEN__ */
+
+    lwesp_flash_t         flash;                /*!< Flash data read structure */
 } lwesp_modules_t;
 
 /**

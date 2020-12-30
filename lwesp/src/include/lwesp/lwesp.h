@@ -72,6 +72,11 @@ uint8_t     lwesp_delay(const uint32_t ms);
 
 uint8_t     lwesp_get_current_at_fw_version(lwesp_sw_version_t* const version);
 
+lwespr_t    lwesp_get_flash_info(const lwesp_api_cmd_evt_fn evt_fn, void* const evt_arg, const uint32_t blocking);
+lwespr_t    lwesp_erase_flash_sector(const char* name, const uint32_t sector, const int32_t count, const lwesp_api_cmd_evt_fn evt_fn, void* const evt_arg, const uint32_t blocking);
+lwespr_t    lwesp_write_flash(const char* name, uint8_t* pBuf, const uint32_t offset, const uint32_t len, const lwesp_api_cmd_evt_fn evt_fn, void* const evt_arg, const uint32_t blocking);
+lwespr_t    lwesp_read_flash(const char* name, uint8_t* pBuf, const uint32_t offset, const uint32_t len, const lwesp_api_cmd_evt_fn evt_fn, void* const evt_arg, const uint32_t blocking);
+
 /**
  * \brief           Set and format major, minor and patch values to firmware version
  * \param[in]       v: Version output, pointer to \ref lwesp_sw_version_t structure
