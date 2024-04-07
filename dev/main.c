@@ -3,14 +3,11 @@
 
 #include <string.h>
 #include "examples_common_lwesp_callback_func.h"
-#include "lwesp/apps/lwesp_cayenne.h"
 #include "lwesp/apps/lwesp_mqtt_client_api.h"
 #include "lwesp/lwesp.h"
 #include "windows.h"
 
-#include "cayenne.h"
 #include "http_server.h"
-#include "lwesp/apps/lwesp_cayenne.h"
 #include "lwesp/lwesp_opt.h"
 #include "lwesp/lwesp_timeout.h"
 #include "lwmem/lwmem.h"
@@ -35,7 +32,6 @@ static lwespr_t lwesp_evt(lwesp_evt_t* evt);
 
 static lwesp_sta_info_ap_t connected_ap_info;
 extern volatile uint8_t lwesp_ll_win32_driver_ignore_data;
-static lwesp_cayenne_t cayenne;
 
 static uint8_t parse_str(char** str, char** out);
 static uint8_t parse_num_u64(char** str, uint64_t* out);
@@ -200,8 +196,7 @@ main_thread(void* arg) {
     //lwesp_sys_thread_create(NULL, "netconn_client", (lwesp_sys_thread_fn)netconn_client_thread, NULL, 0, LWESP_SYS_THREAD_PRIO);
 
     /* Netconn client in separate thread */
-    lwesp_sys_thread_create(NULL, "netconn_client_ssl", (lwesp_sys_thread_fn)netconn_client_ssl_thread, NULL, 0,
-                            LWESP_SYS_THREAD_PRIO);
+    //lwesp_sys_thread_create(NULL, "netconn_client_ssl", (lwesp_sys_thread_fn)netconn_client_ssl_thread, NULL, 0, LWESP_SYS_THREAD_PRIO);
 
     /* Netconn server with multiple threads */
     //lwesp_sys_thread_create(NULL, "netconn_server", (lwesp_sys_thread_fn)netconn_server_thread, NULL, 0, LWESP_SYS_THREAD_PRIO);
@@ -216,7 +211,8 @@ main_thread(void* arg) {
     //lwesp_sys_thread_create(NULL, "mqtt_client_api", (lwesp_sys_thread_fn)lwesp_mqtt_client_api_thread, NULL, 0, LWESP_SYS_THREAD_PRIO);
 
     /* MQTT API client with connectivity to Cayenne */
-    //lwesp_sys_thread_create(NULL, "mqtt_client_api_cayenne", (lwesp_sys_thread_fn)lwesp_mqtt_client_api_cayenne_thread, NULL, 0, LWESP_SYS_THREAD_PRIO);
+    lwesp_sys_thread_create(NULL, "mqtt_client_api_ha", (lwesp_sys_thread_fn)lwesp_mqtt_client_api_ha_thread, NULL, 0,
+                            LWESP_SYS_THREAD_PRIO);
 
     /* LwESP built-in Cayenne protocol implementation thread demo */
     //lwesp_sys_thread_create(NULL, "cayenne", (lwesp_sys_thread_fn)cayenne_thread, NULL, 0, LWESP_SYS_THREAD_PRIO);

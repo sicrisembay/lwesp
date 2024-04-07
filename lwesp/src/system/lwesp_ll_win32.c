@@ -85,8 +85,8 @@ configure_uart(uint32_t baudrate) {
      * List of COM ports to probe for ESP devices
      * This may be different on your computer
      */
-    static const char* com_port_names[] = {"\\\\.\\COM60", "\\\\.\\COM4",  "\\\\.\\COM8",
-                                           "\\\\.\\COM9",  "\\\\.\\COM10", "\\\\.\\COM17"};
+    static const char* com_port_names[] = {"\\\\.\\COM7", "\\\\.\\COM60", "\\\\.\\COM4", "\\\\.\\COM8",
+                                           "\\\\.\\COM9", "\\\\.\\COM10", "\\\\.\\COM17"};
 
     /* Try to open one of listed COM ports */
     if (!initialized) {

@@ -6,7 +6,7 @@ extern "C" {
 #endif /* __cplusplus */
 
 void lwesp_mqtt_client_api_thread(void const* arg);
-void lwesp_mqtt_client_api_cayenne_thread(void const* arg);
+void lwesp_mqtt_client_api_ha_thread(void const* arg);
 
 #ifdef __cplusplus
 }

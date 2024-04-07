@@ -1,5 +1,6 @@
 {
     "files.associations": {
+        "*.lcdjson": "json",
         "lwevt_types.h": "c",
         "lwevt_type.h": "c",
         "lwevt.h": "c",
@@ -43,7 +44,8 @@
         "netconn_client.h": "c",
         "lwesp_sntp.h": "c",
         "utils.h": "c",
-        "lwesp_flash_partitions.h": "c"
+        "lwesp_flash_partitions.h": "c",
+        "math.h": "c"
     },
     "esbonio.sphinx.confDir": ""
 }

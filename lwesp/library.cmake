@@ -64,8 +64,6 @@ set(lwesp_httpsrv_SRCS
 set(lwesp_mqtt_SRCS
     ${CMAKE_CURRENT_LIST_DIR}/src/apps/mqtt/lwesp_mqtt_client.c
     ${CMAKE_CURRENT_LIST_DIR}/src/apps/mqtt/lwesp_mqtt_client_api.c
-    ${CMAKE_CURRENT_LIST_DIR}/src/apps/cayenne/lwesp_cayenne.c
-    ${CMAKE_CURRENT_LIST_DIR}/src/apps/cayenne/lwesp_cayenne_evt.c
 )
 
 # CLI
