@@ -756,41 +756,6 @@
  */
 
 /**
- * \defgroup        LWESP_OPT_MODULES_CAYENNE Cayenne MQTT client
- * \brief           Configuration of Cayenne MQTT client
- * \{
- */
-
-/**
- * \brief           Size of Cayenne messages size TX buffer in units of bytes
- *
- */
-#ifndef LWESP_CFG_CAYENNE_TX_BUFF_SIZE
-#define LWESP_CFG_CAYENNE_TX_BUFF_SIZE 256
-#endif
-
-/**
- * \brief           Size of Cayenne RX buffer size in units of bytes
- *
- */
-#ifndef LWESP_CFG_CAYENNE_RX_BUFF_SIZE
-#define LWESP_CFG_CAYENNE_RX_BUFF_SIZE 256
-#endif
-
-/**
- * \brief           Set debug level for Cayenne MQTT client module
- *
- * Possible values are \ref LWESP_DBG_ON or \ref LWESP_DBG_OFF
- */
-#ifndef LWESP_CFG_DBG_CAYENNE
-#define LWESP_CFG_DBG_CAYENNE LWESP_DBG_OFF
-#endif
-
-/**
- * \}
- */
-
-/**
  * \brief           Enables `1` or disables `0` support for DNS functions
  *
  */

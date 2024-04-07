@@ -32,10 +32,10 @@
 #include "main.h"
 #include "cmsis_os.h"
 
-#include "lwesp/lwesp.h"
-#include "station_manager.h"
-#include "mqtt_client_api.h"
 #include "examples_common_lwesp_callback_func.h"
+#include "lwesp/lwesp.h"
+#include "mqtt_client_api.h"
+#include "station_manager.h"
 
 static void LL_Init(void);
 void SystemClock_Config(void);
@@ -48,17 +48,15 @@ static void init_thread(void* arg);
  */
 int
 main(void) {
-    LL_Init();                                  /* Reset of all peripherals, initializes the Flash interface and the Systick. */
-    SystemClock_Config();                       /* Configure the system clock */
-    USART_Printf_Init();                        /* Init USART for printf */
+    LL_Init();            /* Reset of all peripherals, initializes the Flash interface and the Systick. */
+    SystemClock_Config(); /* Configure the system clock */
+    USART_Printf_Init();  /* Init USART for printf */
 
     printf("Application running on STM32F429ZI-Nucleo!\r\n");
 
     /* Initialize, create first thread and start kernel */
     osKernelInitialize();
-    const osThreadAttr_t attr = {
-            .stack_size = 512
-    };
+    const osThreadAttr_t attr = {.stack_size = 512};
     osThreadNew(init_thread, NULL, &attr);
     osKernelStart();
 
@@ -88,7 +86,8 @@ init_thread(void* arg) {
     station_manager_connect_to_preferred_access_point(1);
 
     /* Create a MQTT API thread */
-    lwesp_sys_thread_create(NULL, "netconn_client", (lwesp_sys_thread_fn)lwesp_mqtt_client_api_cayenne_thread, NULL, LWESP_SYS_THREAD_SS, LWESP_SYS_THREAD_PRIO);
+    lwesp_sys_thread_create(NULL, "netconn_client", (lwesp_sys_thread_fn)lwesp_mqtt_client_api_thread, NULL,
+                            LWESP_SYS_THREAD_SS, LWESP_SYS_THREAD_PRIO);
     osThreadExit();
 }
 
@@ -139,7 +138,7 @@ SystemClock_Config(void) {
 
     /* Configure system clock */
     LL_RCC_SetSysClkSource(LL_RCC_SYS_CLKSOURCE_PLL);
-    while(LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_PLL) {}
+    while (LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_PLL) {}
 
     /* Configure systick */
     LL_Init1msTick(168000000);
@@ -193,9 +192,11 @@ USART_Printf_Init(void) {
  * \return          Written character
  */
 #ifdef __GNUC__
-int __io_putchar(int ch) {
+int
+__io_putchar(int ch) {
 #else
-int fputc(int ch, FILE* fil) {
+int
+fputc(int ch, FILE* fil) {
 #endif
     LL_USART_TransmitData8(USART3, (uint8_t)ch);
     while (!LL_USART_IsActiveFlag_TXE(USART3)) {}
