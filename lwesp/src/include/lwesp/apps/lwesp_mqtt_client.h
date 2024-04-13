@@ -119,17 +119,17 @@ typedef enum {
     LWESP_MQTT_EVT_SUBSCRIBE,    /*!< MQTT client subscribed to specific topic */
     LWESP_MQTT_EVT_UNSUBSCRIBE,  /*!< MQTT client unsubscribed from specific topic */
     LWESP_MQTT_EVT_PUBLISH,      /*!< MQTT client publish message to server event.
-                                                    \note   When publishing packet with quality of service \ref LWESP_MQTT_QOS_AT_MOST_ONCE,
-                                                            you may not receive event, even if packet was successfully sent,
-                                                            thus do not rely on this event for packet with `qos = LWESP_MQTT_QOS_AT_MOST_ONCE` */
+                                        \note   When publishing packet with quality of service \ref LWESP_MQTT_QOS_AT_MOST_ONCE,
+                                        you may not receive event, even if packet was successfully sent,
+                                        thus do not rely on this event for packet with `qos = LWESP_MQTT_QOS_AT_MOST_ONCE` */
     LWESP_MQTT_EVT_PUBLISH_RECV, /*!< MQTT client received a publish message from server */
     LWESP_MQTT_EVT_DISCONNECT,   /*!< MQTT client disconnected from MQTT server */
     LWESP_MQTT_EVT_KEEP_ALIVE,   /*!< MQTT keep-alive event.
-                                                    It gets invoked after client and server exchange successful "keep-alive message",
-                                                    defined by MQTT protocol */
+                                        It gets invoked after client and server exchange successful "keep-alive message",
+                                        defined by MQTT protocol */
     LWESP_MQTT_EVT_CONN_POLL,    /*!< Local ESP connection poll event.
-                                                    When connection is active, stack periodically sends polling events to user.
-                                                    This event is propagated to user MQTT space */
+                                        When connection is active, stack periodically sends polling events to user.
+                                        This event is propagated to user MQTT space */
 } lwesp_mqtt_evt_type_t;
 
 /**

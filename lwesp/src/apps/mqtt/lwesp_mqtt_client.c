@@ -445,8 +445,8 @@ prv_send_data(lwesp_mqtt_client_p client) {
 static lwespr_t
 prv_mqtt_close(lwesp_mqtt_client_p client) {
     lwespr_t res = lwespERR;
-    if (client->conn_state != LWESP_MQTT_CONN_DISCONNECTED && client->conn_state != LWESP_MQTT_CONN_DISCONNECTING) {
 
+    if (client->conn_state != LWESP_MQTT_CONN_DISCONNECTED && client->conn_state != LWESP_MQTT_CONN_DISCONNECTING) {
         res = lwesp_conn_close(client->conn, 0); /* Close the connection in non-blocking mode */
         if (res == lwespOK) {
             client->conn_state = LWESP_MQTT_CONN_DISCONNECTING;
@@ -489,7 +489,10 @@ prv_sub_unsub(lwesp_mqtt_client_p client, const char* topic, lwesp_mqtt_qos_t qo
         && prv_output_check_enough_memory(client, rem_len)) { /* Check if enough memory to write packet data */
         pkt_id = prv_create_packet_id(client);                /* Create new packet ID */
         request = prv_request_create(client, pkt_id, arg);    /* Create request for packet */
-        if (request != NULL) {                                /* Do we have a request */
+
+        LWESP_DEBUGW(LWESP_CFG_DBG_MQTT_TRACE_WARNING, request == NULL, "[LWESP MQTT] Sub unsub request is NULL\r\n");
+
+        if (request != NULL) { /* Do we have a request */
             prv_write_fixed_header(client, sub ? MQTT_MSG_TYPE_SUBSCRIBE : MQTT_MSG_TYPE_UNSUBSCRIBE, 0,
                                    (lwesp_mqtt_qos_t)1, 0, rem_len);
             prv_write_u16(client, pkt_id);              /* Write packet ID */
@@ -793,8 +796,8 @@ prv_mqtt_connected_cb(lwesp_mqtt_client_p client) {
      */
     rem_len = 10; /* Set remaining length of fixed header */
 
-    len_id = LWESP_U16(strlen(client->info->id)); /* Get cliend ID length */
-    rem_len += len_id + 2;                        /* Add client id length including length entries */
+    len_id = LWESP_U16(strlen(client->info->id)); /* Get client ID length */
+    rem_len += len_id + 2;                        /* Add client ID length including length entries */
 
     if (client->info->will_topic != NULL && client->info->will_message != NULL) {
         flags |= MQTT_FLAG_CONNECT_WILL;
@@ -975,6 +978,17 @@ prv_mqtt_closed_cb(lwesp_mqtt_client_p client, lwespr_t res, uint8_t forced) {
 
     LWESP_UNUSED(res);
 
+    /* Check all requests */
+    while ((request = prv_request_get_pending(client, -1)) != NULL) {
+        prv_request_delete(client, request);                                  /* Delete request */
+        prv_request_send_err_callback(client, request->status, request->arg); /* Send error callback to user */
+    }
+    LWESP_MEMSET(client->requests, 0x00, sizeof(client->requests));
+
+    client->is_sending = client->sent_total = client->written_total = 0;
+    client->parser_state = MQTT_PARSER_STATE_INIT;
+    lwesp_buff_reset(&client->tx_buff); /* Reset TX buffer */
+
     /*
      * Call user function only if connection was closed
      * when we are connected or in disconnecting mode
@@ -985,20 +999,6 @@ prv_mqtt_closed_cb(lwesp_mqtt_client_p client, lwespr_t res, uint8_t forced) {
     client->evt.type = LWESP_MQTT_EVT_DISCONNECT; /* Connection disconnected from server */
     client->evt_fn(client, &client->evt);         /* Notify upper layer about closed connection */
     client->conn = NULL;                          /* Reset connection handle */
-
-    /* Check all requests */
-    while ((request = prv_request_get_pending(client, -1)) != NULL) {
-        uint8_t status = request->status;
-        void* arg = request->arg;
-
-        prv_request_delete(client, request);                /* Delete request */
-        prv_request_send_err_callback(client, status, arg); /* Send error callback to user */
-    }
-    LWESP_MEMSET(client->requests, 0x00, sizeof(client->requests));
-
-    client->is_sending = client->sent_total = client->written_total = 0;
-    client->parser_state = MQTT_PARSER_STATE_INIT;
-    lwesp_buff_reset(&client->tx_buff); /* Reset TX buffer */
 
     LWESP_UNUSED(forced);
 
@@ -1122,8 +1122,10 @@ lwesp_mqtt_client_delete(lwesp_mqtt_client_p client) {
 }
 
 /**
- * \brief           Connect to MQTT server
- * \note            After TCP connection is established, CONNECT packet is automatically sent to server
+ * \brief           Connect to MQTT server in non-blocking mode. 
+ *                  Function returns immediately and does not wait for server to be connected.
+ * \note            After TCP connection is established, CONNECT packet is automatically sent to server.
+ *                  Application must rely on events coming to event function, passed at connect stage
  * \param[in]       client: MQTT client
  * \param[in]       host: Host address for server
  * \param[in]       port: Host port number
@@ -1138,10 +1140,10 @@ lwesp_mqtt_client_connect(lwesp_mqtt_client_p client, const char* host, lwesp_po
                           const lwesp_mqtt_client_info_t* info) {
     lwespr_t res = lwespERR;
 
-    LWESP_ASSERT(client != NULL); /* t input parameters */
+    LWESP_ASSERT(client != NULL);
     LWESP_ASSERT(host != NULL);
     LWESP_ASSERT(port > 0);
-    LWESP_ASSERT(info != NULL);
+    LWESP_ASSERT(info != NULL && info->id != NULL);
 
     lwesp_core_lock();
     if (lwesp_sta_is_joined() && client->conn_state == LWESP_MQTT_CONN_DISCONNECTED) {

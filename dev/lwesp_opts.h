@@ -68,7 +68,7 @@
 #define LWESP_CFG_ESP32_C3                        1
 #define LWESP_CFG_ESP32_C6                        1
 
-#define LWESP_CFG_CONN_MAX_DATA_LEN               8192
+#define LWESP_CFG_CONN_MAX_DATA_LEN               1500
 #define LWESP_CFG_INPUT_USE_PROCESS               1
 #define LWESP_CFG_AT_ECHO                         0
 
@@ -92,6 +92,8 @@
 
 #define LWESP_CFG_ACCESS_POINT_STRUCT_FULL_FIELDS 1
 #define LWESP_CFG_LIST_CMD                        1
+
+#define LWESP_CFG_MQTT_MAX_REQUESTS               32
 
 #endif /* !__DOXYGEN__ */
 

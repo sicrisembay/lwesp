@@ -53,7 +53,7 @@ static size_t
 send_data(const void* data, size_t len) {
     DWORD written;
     if (com_port != NULL) {
-#if !LWESP_CFG_AT_ECHO
+#if !LWESP_CFG_AT_ECHO && 0
         const uint8_t* d = data;
         HANDLE hConsole;
 
@@ -178,11 +178,13 @@ uart_thread(void* param) {
             if (bytes_read > 0) {
                 HANDLE hConsole;
                 hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+#if 0
                 SetConsoleTextAttribute(hConsole, FOREGROUND_GREEN);
                 for (DWORD i = 0; i < bytes_read; ++i) {
                     printf("%c", data_buffer[i]);
                 }
                 SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+#endif
 
                 if (lwesp_ll_win32_driver_ignore_data) {
                     printf("IGNORING..\r\n");
