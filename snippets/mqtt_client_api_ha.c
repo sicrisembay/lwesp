@@ -107,6 +107,8 @@
 #define RGBSTRIP_DESC_TOPIC_COLOR_MODE_STATE RGBSTRIP_DESC_TOPIC_PREFIX "/s/clrm"
 #define RGBSTRIP_DESC_TOPIC_RGB              RGBSTRIP_DESC_TOPIC_PREFIX "/c/rgb"
 #define RGBSTRIP_DESC_TOPIC_RGB_STATE        RGBSTRIP_DESC_TOPIC_PREFIX "/s/rgb"
+#define RGBSTRIP_DESC_TOPIC_EFFECT           RGBSTRIP_DESC_TOPIC_PREFIX "/c/effect"
+#define RGBSTRIP_DESC_TOPIC_EFFECT_STATE     RGBSTRIP_DESC_TOPIC_PREFIX "/s/effect"
 #define RGBSTRIP_DESC_CONFIG                                                                                           \
     "{"                                                                                                                \
     "    \"~\": \"" RGBSTRIP_DESC_TOPIC_PREFIX "\","                                                                   \
@@ -125,6 +127,37 @@
     "    \"rgb_cmd_t\": \"~/c/rgb\","                                                                                  \
     "    \"rgb_stat_t\": \"~/s/rgb\","                                                                                 \
     "    \"sup_clrm\": [\"color_temp\",\"rgb\",\"white\"],"                                                            \
+    "    \"effect_command_topic\": \"~/c/effect\","                                                                    \
+    "    \"effect_state_topic\": \"~/s/effect\","                                                                      \
+    "    \"effect\": true,"                                                                                            \
+    "    \"effect_list\": ["                                                                                           \
+    "        \"Static\","                                                                                              \
+    "        \"Blink\","                                                                                               \
+    "        \"Breath\","                                                                                              \
+    "        \"Color Wipe\""                                                                                           \
+    "    ],"                                                                                                           \
+    "    \"device\": {"                                                                                                \
+    "        \"identifiers\": ["                                                                                       \
+    "            \"switch_unit_DEADBEEF\""                                                                             \
+    "        ]"                                                                                                        \
+    "    }"                                                                                                            \
+    "}"
+
+#define LOCK_DESC_TOPIC_DISCOVERY_CONFIG PREFIX_DISCOVERY "/lock/" DEVICE_UNIQUE_TOPIC_ID "/lock_%02u/config"
+#define LOCK_DESC_TOPIC_PREFIX           DEVICE_OP_TOPIC_PREFIX "/lock/%02u"
+#define LOCK_DESC_TOPIC_COMMAND          LOCK_DESC_TOPIC_PREFIX "/c/cmd"
+#define LOCK_DESC_TOPIC_STATE            LOCK_DESC_TOPIC_PREFIX "/s/stat"
+#define LOCK_DESC_CONFIG                                                                                               \
+    "{"                                                                                                                \
+    "    \"~\": \"" LOCK_DESC_TOPIC_PREFIX "\","                                                                       \
+    "    \"name\": \"Lock %02u\","                                                                                     \
+    "    \"object_id\": \"lock_%02u\","                                                                                \
+    "    \"unique_id\": \"lock_" DEVICE_UNIQUE_ID "_%02u\","                                                           \
+    "    \"device_class\": \"lock\","                                                                                  \
+    "    \"cmd_t\": \"~/c/cmd\","                                                                                      \
+    "    \"stat_t\": \"~/s/stat\","                                                                                    \
+    "    \"code_format\": \"^\\\\d{4}$\","                                                                             \
+    "    \"command_template\": \"{ \\\"action\\\": \\\"{{ value }}\\\", \\\"code\\\":\\\"{{ code }}\\\" }\","          \
     "    \"device\": {"                                                                                                \
     "        \"identifiers\": ["                                                                                       \
     "            \"switch_unit_DEADBEEF\""                                                                             \
@@ -380,7 +413,17 @@ typedef enum {
     ARG_GROUP_3,
     ARG_GROUP_4,
     ARG_GROUP_5,
+    ARG_GROUP_6,
 } arg_groups_t;
+
+typedef enum {
+    LOCK_STATE_LOCKED,
+    LOCK_STATE_LOCKING,
+    LOCK_STATE_UNLOCKED,
+    LOCK_STATE_UNLOCKING,
+    LOCK_STATE_JAMMED,
+    LOCK_STATE_OK,
+} lock_state_t;
 
 /**
  * \brief           Connection information for MQTT CONNECT packet
@@ -401,14 +444,18 @@ static char mqtt_topic_data[1024]; /*!< Data string */
 static volatile uint8_t mqtt_is_connected, mqtt_connection_trial_failed, immediate_update = 0;
 
 typedef struct user_data {
+    /* Switch */
     uint8_t switch_states[4];
     uint8_t switch_states_update[4];
+    /* Triac */
     uint8_t triac_states[4];
     uint8_t triac_states_update[4];
     uint8_t triac_brightness[4];
     uint8_t triac_brightness_update[4];
+    /* Sensor */
     float ts_data[4];
     uint8_t ts_data_update[4];
+    /* RGB */
     uint8_t rgb_states[4];
     uint8_t rgb_states_update[4];
     uint8_t rgb_colors[4][3];
@@ -417,6 +464,11 @@ typedef struct user_data {
     uint8_t rgb_brightness_update[4];
     uint16_t rgb_temp[4];
     uint8_t rgb_temp_update[4];
+    char rgb_effect[4][32];
+    uint8_t rgb_effect_update[4];
+    /* Switch */
+    uint8_t lock_states[4];
+    uint8_t lock_states_update[4];
 } user_data_t;
 
 static user_data_t app_io_data;
@@ -598,7 +650,7 @@ prv_mqtt_evt_fn(lwesp_mqtt_client_p client, lwesp_mqtt_evt_t* evt) {
                         break;
                     }
 
-                    /* Check brightness command */
+                    /* Check color temperature command */
                     sprintf(command_topic_string, RGBSTRIP_DESC_TOPIC_COLOR_TEMP, (unsigned)(i + 1));
                     if (strncmp(command_topic_string, topic_name, topic_len) == 0) {
                         uint32_t cnt = 0, number;
@@ -653,6 +705,20 @@ prv_mqtt_evt_fn(lwesp_mqtt_client_p client, lwesp_mqtt_evt_t* evt) {
                         printf("Light RGB command: id=%u, value=%u,%u,%u\r\n", (unsigned)(i + 1),
                                (unsigned)app_io_data.rgb_colors[i][0], (unsigned)app_io_data.rgb_colors[i][1],
                                (unsigned)app_io_data.rgb_colors[i][2]);
+                        break;
+                    }
+
+                    /* Check effect command */
+                    sprintf(command_topic_string, RGBSTRIP_DESC_TOPIC_EFFECT, (unsigned)(i + 1));
+                    if (strncmp(command_topic_string, topic_name, topic_len) == 0) {
+                        if (strncmp(payload, app_io_data.rgb_effect[i], payload_len) != 0) {
+                            strncpy(app_io_data.rgb_effect[i], payload, sizeof(app_io_data.rgb_effect[0]));
+                            app_io_data.rgb_effect[i][sizeof(app_io_data.rgb_effect[0]) - 1] = '\0';
+                            app_io_data.rgb_effect_update[i] = 1;
+                        }
+                        printf("Light effect command: id=%u, value=%s\r\n", (unsigned)(i + 1),
+                               app_io_data.rgb_effect[i]);
+                        found = 1;
                         break;
                     }
                 }
@@ -716,6 +782,17 @@ prv_mqtt_evt_fn(lwesp_mqtt_client_p client, lwesp_mqtt_evt_t* evt) {
                         0, i == 3 ? (void*)ARG_GROUP_5 : NULL));
                 }
             } else if (evt->evt.publish.arg == (void*)ARG_GROUP_5) {
+                /* Send lock entities */
+                for (size_t i = 0; i < ASZ(app_io_data.lock_states); ++i) {
+                    uint32_t id = (i + 1);
+
+                    sprintf(mqtt_topic_str, LOCK_DESC_TOPIC_DISCOVERY_CONFIG, (unsigned)id);
+                    sprintf(mqtt_topic_data, LOCK_DESC_CONFIG, (unsigned)id, (unsigned)id, (unsigned)id, (unsigned)id);
+                    RUN_LWESP_API(lwesp_mqtt_client_publish_custom(
+                        client, mqtt_topic_str, mqtt_topic_data, strlen(mqtt_topic_data), LWESP_MQTT_QOS_AT_LEAST_ONCE,
+                        0, i == 3 ? (void*)ARG_GROUP_6 : NULL));
+                }
+            } else if (evt->evt.publish.arg == (void*)ARG_GROUP_6) {
                 printf("All groups published...\r\n");
                 mqtt_is_connected = 1;
             }
@@ -776,7 +853,7 @@ lwesp_mqtt_client_api_ha_thread(void const* arg) {
 
         res = lwesp_mqtt_client_connect(client, "192.168.1.16", 1883, prv_mqtt_evt_fn, &mqtt_client_info);
         if (res == lwespOK) {
-
+            printf("Connecting...\r\n");
             while (!mqtt_is_connected) {
                 Sleep(1000);
                 if (mqtt_connection_trial_failed) {
@@ -793,7 +870,7 @@ lwesp_mqtt_client_api_ha_thread(void const* arg) {
 
         /* Initialize default values before we connect -> simulate data already ON */
         for (size_t i = 0; i < ASZ(app_io_data.rgb_states); ++i) {
-            app_io_data.rgb_states[i] = 1;
+            app_io_data.rgb_states[i] = i & 1;
             app_io_data.rgb_brightness[i] = 0x07 << i;
             app_io_data.rgb_colors[i][0] = i << 5;
             app_io_data.rgb_colors[i][1] = i << 0;
@@ -801,11 +878,11 @@ lwesp_mqtt_client_api_ha_thread(void const* arg) {
             app_io_data.rgb_temp[i] = 1300;
         }
         for (size_t i = 0; i < ASZ(app_io_data.triac_states); ++i) {
-            app_io_data.triac_states[i] = 1;
+            app_io_data.triac_states[i] = i & 1;
             app_io_data.triac_brightness[i] = 0x03 << i;
         }
         for (size_t i = 0; i < ASZ(app_io_data.switch_states); ++i) {
-            app_io_data.switch_states[i] = 1;
+            app_io_data.switch_states[i] = i & 1;
         }
 
         uint8_t first_time = 1;
@@ -877,6 +954,17 @@ lwesp_mqtt_client_api_ha_thread(void const* arg) {
                                                                    strlen(mqtt_topic_data),
                                                                    LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
                 }
+
+                if (app_io_data.rgb_effect_update[i] || first_time) {
+                    app_io_data.rgb_effect_update[i] = 0;
+
+                    /* Publish RGB color */
+                    sprintf(mqtt_topic_str, RGBSTRIP_DESC_TOPIC_EFFECT_STATE, (unsigned)id);
+                    sprintf(mqtt_topic_data, "%s", app_io_data.rgb_effect[i]);
+                    RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
+                                                                   strlen(mqtt_topic_data),
+                                                                   LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                }
             }
 
             /* Publish triac states */
@@ -898,6 +986,21 @@ lwesp_mqtt_client_api_ha_thread(void const* arg) {
 
                     sprintf(mqtt_topic_str, TRIAC_DESC_TOPIC_BRIGHTNESS_STATE, (unsigned)id);
                     sprintf(mqtt_topic_data, "{\"brightness\":%u}", (unsigned)app_io_data.triac_brightness[i]);
+                    RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
+                                                                   strlen(mqtt_topic_data),
+                                                                   LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                }
+            }
+
+            /* Publish lock states */
+            for (size_t i = 0; i < ASZ(app_io_data.lock_states); ++i) {
+                uint32_t id = i + 1;
+
+                if (app_io_data.lock_states_update[i] || first_time) {
+                    app_io_data.lock_states_update[i] = 0;
+
+                    sprintf(mqtt_topic_str, LOCK_DESC_TOPIC_STATE, (unsigned)id);
+                    sprintf(mqtt_topic_data, "%s", app_io_data.lock_states[i] ? "UNLOCKED" : "LOCKED");
                     RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
                                                                    strlen(mqtt_topic_data),
                                                                    LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
