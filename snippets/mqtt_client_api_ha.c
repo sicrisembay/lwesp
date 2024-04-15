@@ -417,13 +417,34 @@ typedef enum {
 } arg_groups_t;
 
 typedef enum {
+    /* The three commands we can receive */
+    LOCK_STATE_LOCK = 0,
+    LOCK_STATE_UNLOCK,
+    LOCK_STATE_OPEN,
+
+    /* Then states we have later */
+    LOCK_STATE_OK,
     LOCK_STATE_LOCKED,
     LOCK_STATE_LOCKING,
     LOCK_STATE_UNLOCKED,
     LOCK_STATE_UNLOCKING,
     LOCK_STATE_JAMMED,
-    LOCK_STATE_OK,
 } lock_state_t;
+
+/* List of commands in string, much match the enumeration sequence */
+static const char* lock_state_strings[] = {
+    /* Command from server */
+    "LOCK",
+    "UNLOCK",
+    "OPEN",
+    /* States */
+    "OK",
+    "LOCKED",
+    "LOCKING",
+    "UNLOCKED",
+    "UNLOCKING",
+    "JAMMED",
+};
 
 /**
  * \brief           Connection information for MQTT CONNECT packet
@@ -466,9 +487,10 @@ typedef struct user_data {
     uint8_t rgb_temp_update[4];
     char rgb_effect[4][32];
     uint8_t rgb_effect_update[4];
-    /* Switch */
-    uint8_t lock_states[4];
+    /* Lock */
+    lock_state_t lock_states[4];
     uint8_t lock_states_update[4];
+    uint32_t lock_states_last_updated[4];
 } user_data_t;
 
 static user_data_t app_io_data;
@@ -564,7 +586,7 @@ prv_mqtt_evt_fn(lwesp_mqtt_client_p client, lwesp_mqtt_evt_t* evt) {
             printf("Publish received. Topic: %.*s, payload: %.*s\r\n", (int)topic_len, topic_name, (int)payload_len,
                    payload);
 
-            /* Check switchs */
+            /* Check switches */
             if (!found) {
                 for (size_t i = 0; i < ASZ(app_io_data.switch_states); ++i) {
                     sprintf(command_topic_string, SWITCH_DESC_TOPIC_COMMAND, (unsigned)(i + 1));
@@ -720,6 +742,28 @@ prv_mqtt_evt_fn(lwesp_mqtt_client_p client, lwesp_mqtt_evt_t* evt) {
                                app_io_data.rgb_effect[i]);
                         found = 1;
                         break;
+                    }
+                }
+            }
+
+            /* Check locks */
+            if (!found) {
+                for (size_t i = 0; i < ASZ(app_io_data.lock_states); ++i) {
+                    sprintf(command_topic_string, LOCK_DESC_TOPIC_COMMAND, (unsigned)(i + 1));
+                    if (strncmp(command_topic_string, topic_name, topic_len) == 0) {
+
+                        /* Check if string in strings array match, then use the index as a state from enumeration */
+                        for (size_t strings_index = 0; strings_index < ASZ(lock_state_strings); ++strings_index) {
+                            if (strncmp(payload, lock_state_strings[strings_index], payload_len) == 0) {
+                                /* We found a state, check if indexes match now */
+                                if ((lock_state_t)strings_index != app_io_data.lock_states[i]) {
+                                    app_io_data.lock_states[i] = (lock_state_t)strings_index;
+                                    /* We do not update immediately - it will be handled in the processing function */
+                                }
+                                found = 1;
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -886,134 +930,206 @@ lwesp_mqtt_client_api_ha_thread(void const* arg) {
         }
 
         uint8_t first_time = 1;
+        uint32_t time_last_states_update = lwesp_sys_now();
         while (mqtt_is_connected) {
-#if 1
-            /* Reset before updating, if new request comes in between, to run again */
-            immediate_update = 0;
+            uint32_t time_now = lwesp_sys_now();
 
-            /* Publish switch states */
-            for (size_t i = 0; i < ASZ(app_io_data.switch_states); ++i) {
-                uint32_t id = i + 1;
+            if (immediate_update || (time_now - time_last_states_update) >= 5000) {
+                immediate_update = 0;
+                time_last_states_update = time_now;
 
-                if (app_io_data.switch_states_update[i] || first_time) {
-                    app_io_data.switch_states_update[i] = 0;
+                /* Publish switch states */
+                for (size_t i = 0; i < ASZ(app_io_data.switch_states); ++i) {
+                    uint32_t id = i + 1;
 
-                    sprintf(mqtt_topic_str, SWITCH_DESC_TOPIC_STATE, (unsigned)id);
-                    sprintf(mqtt_topic_data, "%s", app_io_data.switch_states[i] ? "ON" : "OFF");
-                    RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
-                                                                   strlen(mqtt_topic_data),
-                                                                   LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                    if (app_io_data.switch_states_update[i] || first_time) {
+                        app_io_data.switch_states_update[i] = 0;
+
+                        sprintf(mqtt_topic_str, SWITCH_DESC_TOPIC_STATE, (unsigned)id);
+                        sprintf(mqtt_topic_data, "%s", app_io_data.switch_states[i] ? "ON" : "OFF");
+                        RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
+                                                                       strlen(mqtt_topic_data),
+                                                                       LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                    }
+                }
+
+                /* Publish RGB strip states */
+                for (size_t i = 0; i < ASZ(app_io_data.rgb_states); ++i) {
+                    uint32_t id = i + 1;
+
+                    if (app_io_data.rgb_states_update[i] || first_time) {
+                        app_io_data.rgb_states_update[i] = 0;
+
+                        /* Publish state */
+                        sprintf(mqtt_topic_str, RGBSTRIP_DESC_TOPIC_STATE, (unsigned)id);
+                        sprintf(mqtt_topic_data, "%s", app_io_data.rgb_states[i] ? "ON" : "OFF");
+                        RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
+                                                                       strlen(mqtt_topic_data),
+                                                                       LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                    }
+
+                    if (app_io_data.rgb_brightness_update[i] || first_time) {
+                        app_io_data.rgb_brightness_update[i] = 0;
+
+                        /* Publish brightness */
+                        sprintf(mqtt_topic_str, RGBSTRIP_DESC_TOPIC_BRIGHTNESS_STATE, (unsigned)id);
+                        sprintf(mqtt_topic_data, "{\"brightness\":%u}", (unsigned)app_io_data.rgb_brightness[i]);
+                        RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
+                                                                       strlen(mqtt_topic_data),
+                                                                       LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                    }
+
+                    if (app_io_data.rgb_temp_update[i] || first_time) {
+                        app_io_data.rgb_temp_update[i] = 0;
+
+                        /* Publish brightness */
+                        sprintf(mqtt_topic_str, RGBSTRIP_DESC_TOPIC_COLOR_TEMP_STATE, (unsigned)id);
+                        sprintf(mqtt_topic_data, "%u", (unsigned)app_io_data.rgb_temp[i]);
+                        RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
+                                                                       strlen(mqtt_topic_data),
+                                                                       LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                    }
+
+                    if (app_io_data.rgb_colors_update[i] || first_time) {
+                        app_io_data.rgb_colors_update[i] = 0;
+
+                        /* Publish RGB color */
+                        sprintf(mqtt_topic_str, RGBSTRIP_DESC_TOPIC_RGB_STATE, (unsigned)id);
+                        sprintf(mqtt_topic_data, "%u,%u,%u", (unsigned)app_io_data.rgb_colors[i][0],
+                                (unsigned)app_io_data.rgb_colors[i][1], (unsigned)app_io_data.rgb_colors[i][2]);
+                        RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
+                                                                       strlen(mqtt_topic_data),
+                                                                       LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                    }
+
+                    if (app_io_data.rgb_effect_update[i] || first_time) {
+                        app_io_data.rgb_effect_update[i] = 0;
+
+                        /* Publish RGB color */
+                        sprintf(mqtt_topic_str, RGBSTRIP_DESC_TOPIC_EFFECT_STATE, (unsigned)id);
+                        sprintf(mqtt_topic_data, "%s", app_io_data.rgb_effect[i]);
+                        RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
+                                                                       strlen(mqtt_topic_data),
+                                                                       LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                    }
+                }
+
+                /* Publish triac states */
+                for (size_t i = 0; i < ASZ(app_io_data.triac_states); ++i) {
+                    uint32_t id = i + 1;
+
+                    if (app_io_data.triac_states_update[i] || first_time) {
+                        app_io_data.triac_states_update[i] = 0;
+
+                        sprintf(mqtt_topic_str, TRIAC_DESC_TOPIC_STATE, (unsigned)id);
+                        sprintf(mqtt_topic_data, "%s", app_io_data.triac_states[i] ? "ON" : "OFF");
+                        RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
+                                                                       strlen(mqtt_topic_data),
+                                                                       LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                    }
+
+                    if (app_io_data.triac_brightness_update[i] || first_time) {
+                        app_io_data.triac_brightness_update[i] = 0;
+
+                        sprintf(mqtt_topic_str, TRIAC_DESC_TOPIC_BRIGHTNESS_STATE, (unsigned)id);
+                        sprintf(mqtt_topic_data, "{\"brightness\":%u}", (unsigned)app_io_data.triac_brightness[i]);
+                        RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
+                                                                       strlen(mqtt_topic_data),
+                                                                       LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                    }
+                }
+
+                /* Publish lock states */
+                for (size_t i = 0; i < ASZ(app_io_data.lock_states); ++i) {
+                    uint32_t id = i + 1;
+
+                    /* Handle states... */
+
+                    if (app_io_data.lock_states_update[i] || first_time) {
+                        app_io_data.lock_states_update[i] = 0;
+
+                        sprintf(mqtt_topic_str, LOCK_DESC_TOPIC_STATE, (unsigned)id);
+                        sprintf(mqtt_topic_data, "%s", lock_state_strings[app_io_data.lock_states[i]]);
+                        RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
+                                                                       strlen(mqtt_topic_data),
+                                                                       LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                    }
                 }
             }
 
-            /* Publish RGB strip states */
-            for (size_t i = 0; i < ASZ(app_io_data.rgb_states); ++i) {
-                uint32_t id = i + 1;
-
-                if (app_io_data.rgb_states_update[i] || first_time) {
-                    app_io_data.rgb_states_update[i] = 0;
-
-                    /* Publish state */
-                    sprintf(mqtt_topic_str, RGBSTRIP_DESC_TOPIC_STATE, (unsigned)id);
-                    sprintf(mqtt_topic_data, "%s", app_io_data.rgb_states[i] ? "ON" : "OFF");
-                    RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
-                                                                   strlen(mqtt_topic_data),
-                                                                   LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
-                }
-
-                if (app_io_data.rgb_brightness_update[i] || first_time) {
-                    app_io_data.rgb_brightness_update[i] = 0;
-
-                    /* Publish brightness */
-                    sprintf(mqtt_topic_str, RGBSTRIP_DESC_TOPIC_BRIGHTNESS_STATE, (unsigned)id);
-                    sprintf(mqtt_topic_data, "{\"brightness\":%u}", (unsigned)app_io_data.rgb_brightness[i]);
-                    RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
-                                                                   strlen(mqtt_topic_data),
-                                                                   LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
-                }
-
-                if (app_io_data.rgb_temp_update[i] || first_time) {
-                    app_io_data.rgb_temp_update[i] = 0;
-
-                    /* Publish brightness */
-                    sprintf(mqtt_topic_str, RGBSTRIP_DESC_TOPIC_COLOR_TEMP_STATE, (unsigned)id);
-                    sprintf(mqtt_topic_data, "%u", (unsigned)app_io_data.rgb_temp[i]);
-                    RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
-                                                                   strlen(mqtt_topic_data),
-                                                                   LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
-                }
-
-                if (app_io_data.rgb_colors_update[i] || first_time) {
-                    app_io_data.rgb_colors_update[i] = 0;
-
-                    /* Publish RGB color */
-                    sprintf(mqtt_topic_str, RGBSTRIP_DESC_TOPIC_RGB_STATE, (unsigned)id);
-                    sprintf(mqtt_topic_data, "%u,%u,%u", (unsigned)app_io_data.rgb_colors[i][0],
-                            (unsigned)app_io_data.rgb_colors[i][1], (unsigned)app_io_data.rgb_colors[i][2]);
-                    RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
-                                                                   strlen(mqtt_topic_data),
-                                                                   LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
-                }
-
-                if (app_io_data.rgb_effect_update[i] || first_time) {
-                    app_io_data.rgb_effect_update[i] = 0;
-
-                    /* Publish RGB color */
-                    sprintf(mqtt_topic_str, RGBSTRIP_DESC_TOPIC_EFFECT_STATE, (unsigned)id);
-                    sprintf(mqtt_topic_data, "%s", app_io_data.rgb_effect[i]);
-                    RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
-                                                                   strlen(mqtt_topic_data),
-                                                                   LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
-                }
-            }
-
-            /* Publish triac states */
-            for (size_t i = 0; i < ASZ(app_io_data.triac_states); ++i) {
-                uint32_t id = i + 1;
-
-                if (app_io_data.triac_states_update[i] || first_time) {
-                    app_io_data.triac_states_update[i] = 0;
-
-                    sprintf(mqtt_topic_str, TRIAC_DESC_TOPIC_STATE, (unsigned)id);
-                    sprintf(mqtt_topic_data, "%s", app_io_data.triac_states[i] ? "ON" : "OFF");
-                    RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
-                                                                   strlen(mqtt_topic_data),
-                                                                   LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
-                }
-
-                if (app_io_data.triac_brightness_update[i] || first_time) {
-                    app_io_data.triac_brightness_update[i] = 0;
-
-                    sprintf(mqtt_topic_str, TRIAC_DESC_TOPIC_BRIGHTNESS_STATE, (unsigned)id);
-                    sprintf(mqtt_topic_data, "{\"brightness\":%u}", (unsigned)app_io_data.triac_brightness[i]);
-                    RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
-                                                                   strlen(mqtt_topic_data),
-                                                                   LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
-                }
-            }
-
-            /* Publish lock states */
+            /* Handle lock states here */
+            lwesp_sys_protect();
             for (size_t i = 0; i < ASZ(app_io_data.lock_states); ++i) {
-                uint32_t id = i + 1;
+                switch (app_io_data.lock_states[i]) {
+                    /* Commands we can receive from the cloud */
+                    case LOCK_STATE_LOCK: {
+                        /* Let's start the locking procedure */
+                        app_io_data.lock_states[i] = LOCK_STATE_LOCKING;
+                        app_io_data.lock_states_update[i] = 1;
+                        app_io_data.lock_states_last_updated[i] = time_now;
+                        immediate_update = 1;
+                        printf("Locking starting\r\n");
+                        break;
+                    }
+                    case LOCK_STATE_UNLOCK:
+                    case LOCK_STATE_OPEN: {
+                        /* Let's start the locking procedure */
+                        app_io_data.lock_states[i] = LOCK_STATE_UNLOCKING;
+                        app_io_data.lock_states_update[i] = 1;
+                        app_io_data.lock_states_last_updated[i] = time_now;
+                        immediate_update = 1;
+                        printf("Unlocking starting\r\n");
+                        break;
+                    }
 
-                if (app_io_data.lock_states_update[i] || first_time) {
-                    app_io_data.lock_states_update[i] = 0;
-
-                    sprintf(mqtt_topic_str, LOCK_DESC_TOPIC_STATE, (unsigned)id);
-                    sprintf(mqtt_topic_data, "%s", app_io_data.lock_states[i] ? "UNLOCKED" : "LOCKED");
-                    RUN_LWESP_API(lwesp_mqtt_client_publish_custom(client, mqtt_topic_str, mqtt_topic_data,
-                                                                   strlen(mqtt_topic_data),
-                                                                   LWESP_MQTT_QOS_AT_LEAST_ONCE, 0, NULL));
+                    /* States we can operate in... */
+                    case LOCK_STATE_LOCKING: {
+                        /* Stay in locking for some time */
+                        if (time_now - app_io_data.lock_states_last_updated[i] >= (i + 1) * 1000) {
+                            app_io_data.lock_states[i] = LOCK_STATE_LOCKED;
+                            app_io_data.lock_states_update[i] = 1;
+                            app_io_data.lock_states_last_updated[i] = time_now;
+                            immediate_update = 1;
+                            printf("Device is now locked\r\n");
+                        }
+                        break;
+                    }
+                    case LOCK_STATE_LOCKED: {
+                        /* Nothing to do here, wait for a new command to start unlocking or opening... */
+                        break;
+                    }
+                    case LOCK_STATE_UNLOCKING: {
+                        /* Stay in locking for some time */
+                        if (time_now - app_io_data.lock_states_last_updated[i] >= (i + 1) * 1000) {
+                            app_io_data.lock_states[i] = LOCK_STATE_UNLOCKED;
+                            app_io_data.lock_states_update[i] = 1;
+                            app_io_data.lock_states_last_updated[i] = time_now;
+                            immediate_update = 1;
+                            printf("Unlocked!\r\n");
+                        }
+                        break;
+                    }
+                    case LOCK_STATE_UNLOCKED: {
+                        /* Stay in unlocked for some time then go back to locking state */
+                        if (time_now - app_io_data.lock_states_last_updated[i] >= (i + 1) * 1000) {
+                            app_io_data.lock_states[i] = LOCK_STATE_LOCKING;
+                            app_io_data.lock_states_update[i] = 1;
+                            app_io_data.lock_states_last_updated[i] = time_now;
+                            immediate_update = 1;
+                            printf("Locking starting\r\n");
+                        }
+                        break;
+                    }
+                    default: {
+                        app_io_data.lock_states[i] = LOCK_STATE_LOCK;
+                        break;
+                    }
                 }
             }
-#endif
+            lwesp_sys_unprotect();
 
             first_time = 0;
-
-            /* Sleep while waiting for an immediate update... */
-            for (size_t i = 0; i < 100 && !immediate_update; ++i) {
-                Sleep(20);
-            }
+            lwesp_delay(50);
         }
         printf("Mqtt is not connected anymore\r\n");
     }
